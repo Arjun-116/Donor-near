@@ -1,26 +1,92 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>Register</title>
-<link rel="stylesheet" href="css/style.css">
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <title>Register</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
 <body class="container">
 
 <h2 class="text-danger mt-4">Donor Registration</h2>
 
-<form class="mt-3">
-  <input class="form-control my-2" placeholder="Full Name">
-  <select class="form-control my-2">
-    <option>Select Blood Group</option>
+<form class="mt-3" id="registrationForm">
+  <input id="fullName" class="form-control my-2" placeholder="Full Name" required>
+  
+  <select id="bloodGroup" class="form-control my-2" required>
+    <option value="">Select Blood Group</option>
     <option>A+</option><option>A-</option><option>B+</option><option>B-</option>
     <option>AB+</option><option>AB-</option><option>O+</option><option>O-</option>
   </select>
-  <input class="form-control my-2" placeholder="Phone Number">
-  <input class="form-control my-2" placeholder="City">
+  
+  <input id="phone" type="tel" class="form-control my-2" placeholder="Phone Number" required>
+  
+  <input id="city" class="form-control my-2" placeholder="City" required>
+  
   <p class="text-muted">Location will be captured using GPS</p>
-  <button class="btn btn-danger mt-2">Register</button>
+  
+  <button type="button" onclick="handleRegistration()" class="btn btn-danger mt-2">Register</button>
 </form>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyAhgBBtTeHiFziN6KUBtqLwJu5LZUlrMHo",
+        authDomain: "donornear.firebaseapp.com",
+        projectId: "donornear",
+        storageBucket: "donornear.firebasestorage.app",
+        messagingSenderId: "772619025659",
+        appId: "1:772619025659:web:fe5f6bada8caeb7a0d045e"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    window.handleRegistration = function() {
+        if (navigator.geolocation) {
+            // Options for high accuracy
+            const options = { enableHighAccuracy: true, timeout: 10000 };
+            navigator.geolocation.getCurrentPosition(submitData, showError, options);
+        } else {
+            alert("Geolocation is not supported by this browser.");
+        }
+    };
+
+    async function submitData(position) {
+        const name = document.getElementById('fullName').value;
+        const blood = document.getElementById('bloodGroup').value;
+        const phone = document.getElementById('phone').value;
+        const city = document.getElementById('city').value;
+
+        if(!name || !blood || !phone || !city) {
+            alert("Please fill in all fields.");
+            return;
+        }
+
+        try {
+            // Adding document to Firestore
+            await addDoc(collection(db, "donors"), {
+                name: name,
+                bloodGroup: blood,
+                phone: phone,
+                city: city,
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude,
+                createdAt: serverTimestamp()
+            });
+            alert("Registration Successful!");
+            document.getElementById('registrationForm').reset();
+        } catch (e) {
+            console.error("Error adding donor: ", e);
+            alert("Registration failed. Please check your internet.");
+        }
+    }
+
+    function showError(error) {
+        alert("GPS Error: " + error.message);
+    }
+</script>
 
 </body>
 </html>
