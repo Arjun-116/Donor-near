@@ -19,17 +19,23 @@
   </select>
   
   <input id="phone" type="tel" class="form-control my-2" placeholder="Phone Number" required>
-  
   <input id="city" class="form-control my-2" placeholder="City" required>
+
+  <hr>
+  <h6>Account Credentials</h6>
+  <input id="email" class="form-control my-2" type="email" placeholder="Email Address" required>
+  <input id="password" class="form-control my-2" type="password" placeholder="Password (min 6 chars)" required>
   
-  <p class="text-muted">Location will be captured using GPS</p>
+  <p class="text-muted small">📍 Location will be captured using GPS for proximity searching.</p>
   
-  <button type="button" onclick="handleRegistration()" class="btn btn-danger mt-2">Register</button>
+  <button type="button" onclick="handleRegistration()" class="btn btn-danger mt-2 w-100">Create Account & Register</button>
 </form>
 
 <script type="module">
+    // Import Auth and Firestore modules
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { getAuth, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+    import { getFirestore, doc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     const firebaseConfig = {
         apiKey: "AIzaSyAhgBBtTeHiFziN6KUBtqLwJu5LZUlrMHo",
@@ -40,46 +46,62 @@
         appId: "1:772619025659:web:fe5f6bada8caeb7a0d045e"
     };
 
+    // Initialize Firebase
     const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
     const db = getFirestore(app);
 
     window.handleRegistration = function() {
         if (navigator.geolocation) {
-            // Options for high accuracy
-            const options = { enableHighAccuracy: true, timeout: 10000 };
-            navigator.geolocation.getCurrentPosition(submitData, showError, options);
+            // Request High Accuracy GPS
+            navigator.geolocation.getCurrentPosition(processRegistration, showError, {
+                enableHighAccuracy: true,
+                timeout: 10000
+            });
         } else {
             alert("Geolocation is not supported by this browser.");
         }
     };
 
-    async function submitData(position) {
+    async function processRegistration(position) {
+        // Collect all form values
+        const email = document.getElementById('email').value;
+        const password = document.getElementById('password').value;
         const name = document.getElementById('fullName').value;
         const blood = document.getElementById('bloodGroup').value;
         const phone = document.getElementById('phone').value;
         const city = document.getElementById('city').value;
 
-        if(!name || !blood || !phone || !city) {
+        // Basic Validation
+        if(!email || !password || !name || !blood || !phone) {
             alert("Please fill in all fields.");
             return;
         }
 
         try {
-            // Adding document to Firestore
-            await addDoc(collection(db, "donors"), {
+            // 1. Create Login User in Firebase Auth
+            const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+            const user = userCredential.user;
+
+            // 2. Save Donor Profile to Firestore using the Auth UID
+            // We use setDoc instead of addDoc so the document ID matches the User ID
+            await setDoc(doc(db, "donors", user.uid), {
                 name: name,
                 bloodGroup: blood,
                 phone: phone,
                 city: city,
+                email: email,
                 latitude: position.coords.latitude,
                 longitude: position.coords.longitude,
                 createdAt: serverTimestamp()
             });
-            alert("Registration Successful!");
-            document.getElementById('registrationForm').reset();
-        } catch (e) {
-            console.error("Error adding donor: ", e);
-            alert("Registration failed. Please check your internet.");
+
+            alert("Registration Successful! You are now logged in.");
+            window.location.href = "index.html"; // Redirect to home
+            
+        } catch (error) {
+            console.error("Error during registration:", error);
+            alert("Error: " + error.message);
         }
     }
 
