@@ -1,121 +1,199 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Find Donors</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DonorNear - Find Blood Donors</title>
     <link rel="stylesheet" href="css/style.css">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        #map { 
+            height: 400px; 
+            width: 100%; 
+            border-radius: 12px; 
+            margin: 20px 0; 
+            border: 2px solid #dc3545;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            z-index: 1; 
+        }
+        .donor-card {
+            border-left: 5px solid #dc3545;
+            transition: transform 0.2s;
+        }
+        .donor-card:hover {
+            transform: scale(1.02);
+            background-color: #fffafa;
+        }
+    </style>
 </head>
-<body class="container">
+<body class="container py-4">
 
-<h2 class="text-danger mt-4">Find Blood Donors</h2>
+    <div class="mb-3">
+        <a href="index.html" class="btn btn-outline-secondary btn-sm">← Back to Home</a>
+    </div>
 
-<select id="bloodSelect" class="form-control my-2">
-  <option value="">Select Blood Group</option>
-  <option>A+</option>
-  <option>A-</option>
-  <option>B+</option>
-  <option>B-</option>
-  <option>O+</option>
-  <option>O-</option>
-  <option>AB+</option>
-  <option>AB-</option>
-</select>
+    <h2 class="text-danger fw-bold">Find Blood Donors</h2>
+    <p class="text-muted">Enter requirements below to find the nearest compatible donors on the map.</p>
 
-<select id="distSelect" class="form-control my-2">
-  <option value="10">Within 10 km</option>
-  <option value="25">Within 25 km</option>
-  <option value="50" selected>Within 50 km</option>
-  <option value="100">Within 100 km</option>
-  <option value="500">Within 500 km</option>
-</select>
+    <div class="row g-2 p-3 bg-white rounded shadow-sm">
+        <div class="col-md-5">
+            <label class="small fw-bold text-muted">Blood Group</label>
+            <select id="bloodSelect" class="form-control">
+                <option value="">Select Group</option>
+                <option>A+</option><option>A-</option>
+                <option>B+</option><option>B-</option>
+                <option>O+</option><option>O-</option>
+                <option>AB+</option><option>AB-</option>
+            </select>
+        </div>
+        <div class="col-md-4">
+            <label class="small fw-bold text-muted">Radius (km)</label>
+            <select id="distSelect" class="form-control">
+                <option value="10">Within 10 km</option>
+                <option value="25">Within 25 km</option>
+                <option value="50" selected>Within 50 km</option>
+                <option value="100">Within 100 km</option>
+            </select>
+        </div>
+        <div class="col-md-3 d-flex align-items-end">
+            <button onclick="startSearch()" class="btn btn-danger w-100 py-2">Search Nearby</button>
+        </div>
+    </div>
 
-<button onclick="startSearch()" class="btn btn-danger mt-2 w-100">Search</button>
+    <div id="map"></div>
 
-<hr>
+    <hr>
 
-<h5>Search Results</h5>
-<div id="results">
-    <p class="text-muted">Results will appear here...</p>
-</div>
+    <h5 class="fw-bold mb-3">Donors in Your Area</h5>
+    <div id="results" class="row">
+        <p class="text-muted">Set your search criteria to see results...</p>
+    </div>
 
-<script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getFirestore, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-    const firebaseConfig = {
-        apiKey: "AIzaSyAhgBBtTeHiFziN6KUBtqLwJu5LZUlrMHo",
-        authDomain: "donornear.firebaseapp.com",
-        projectId: "donornear",
-        storageBucket: "donornear.firebasestorage.app",
-        messagingSenderId: "772619025659",
-        appId: "1:772619025659:web:fe5f6bada8caeb7a0d045e"
-    };
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getFirestore, collection, query, where, getDocs } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
+        // Firebase configuration (verified)
+        const firebaseConfig = {
+            apiKey: "AIzaSyAhgBBtTeHiFziN6KUBtqLwJu5LZUlrMHo",
+            authDomain: "donornear.firebaseapp.com",
+            projectId: "donornear",
+            storageBucket: "donornear.firebasestorage.app",
+            messagingSenderId: "772619025659",
+            appId: "1:772619025659:web:fe5f6bada8caeb7a0d045e"
+        };
 
-    window.startSearch = function() {
-        if (navigator.geolocation) {
-            // enableHighAccuracy helps get the most precise location possible
-            navigator.geolocation.getCurrentPosition(runQuery, (err) => alert(err.message), {enableHighAccuracy: true});
-        } else {
-            alert("GPS required.");
-        }
-    };
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
 
-    async function runQuery(pos) {
-        const group = document.getElementById('bloodSelect').value;
-        const maxD = parseFloat(document.getElementById('distSelect').value);
-        const resDiv = document.getElementById('results');
+        let map;
+        let markerGroup;
 
-        if(!group) return alert("Please select a blood group");
-
-        resDiv.innerHTML = "<div class='text-muted'>Searching database...</div>";
-        
-        try {
-            // Firebase query filters donors matching the selected blood group
-            const q = query(collection(db, "donors"), where("bloodGroup", "==", group));
-            const snapshot = await getDocs(q);
-            resDiv.innerHTML = "";
-
-            if (snapshot.empty) {
-                resDiv.innerHTML = `<p class='text-muted'>No donors found for group ${group}.</p>`;
-                return;
+        // Function to initialize or update the map
+        function setupMap(lat, lng) {
+            if (!map) {
+                // First-time load: center on user
+                map = L.map('map').setView([lat, lng], 12);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors'
+                }).addTo(map);
+                markerGroup = L.layerGroup().addTo(map);
+            } else {
+                // Update map view on subsequent searches
+                map.setView([lat, lng], 12);
+                markerGroup.clearLayers();
             }
-
-            snapshot.forEach(doc => {
-                const d = doc.data();
-                // Haversine distance formula used for calculating proximity
-                const dist = calcDist(pos.coords.latitude, pos.coords.longitude, d.latitude, d.longitude);
-                
-                if(dist <= maxD) {
-                    const donorCard = document.createElement('div');
-                    donorCard.className = "my-3 p-3 border rounded shadow-sm bg-white";
-                    donorCard.innerHTML = `
-                        <h6 class="text-danger fw-bold">${d.name} (${d.bloodGroup})</h6>
-                        <p class="mb-1">📍 ${d.city} | 📏 <strong>${dist.toFixed(2)} km</strong> away</p>
-                        <a href="tel:${d.phone}" class="btn btn-sm btn-outline-success">Call ${d.phone}</a>
-                    `;
-                    resDiv.appendChild(donorCard);
-                }
-            });
-            
-            if(resDiv.innerHTML === "") resDiv.innerHTML = "No donors found within this distance range.";
-        } catch (e) { 
-            console.error(e); 
-            resDiv.innerHTML = "Error loading data. Check your Firestore connection."; 
         }
-    }
 
-    // Mathematical formula to calculate distance between two GPS points on Earth
-    function calcDist(lat1, lon1, lat2, lon2) {
-        const R = 6371; // Earth's radius in kilometers
-        const dLat = (lat2-lat1) * Math.PI / 180;
-        const dLon = (lon2-lon1) * Math.PI / 180;
-        const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
-        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    }
-</script>
+        window.startSearch = function() {
+            if (navigator.geolocation) {
+                // capturing seeker location for proximity calculation
+                navigator.geolocation.getCurrentPosition(runQuery, (err) => alert("Location Error: " + err.message), {enableHighAccuracy: true});
+            } else {
+                alert("Geolocation is required to find nearby donors.");
+            }
+        };
 
+        async function runQuery(pos) {
+            const seekerLat = pos.coords.latitude;
+            const seekerLng = pos.coords.longitude;
+            const groupNeeded = document.getElementById('bloodSelect').value;
+            const maxDistance = parseFloat(document.getElementById('distSelect').value);
+            const resDiv = document.getElementById('results');
+
+            if(!groupNeeded) return alert("Please select a blood group.");
+
+            // Initialize Map
+            setupMap(seekerLat, seekerLng);
+            
+            // Marker for the Seeker (Blue)
+            L.marker([seekerLat, seekerLng]).addTo(markerGroup)
+                .bindPopup("<b>You are here</b>").openPopup();
+
+            resDiv.innerHTML = "<div class='text-muted'>Searching donors...</div>";
+            
+            try {
+                // Firebase query for specific blood type
+                const q = query(collection(db, "donors"), where("bloodGroup", "==", groupNeeded));
+                const snapshot = await getDocs(q);
+                resDiv.innerHTML = "";
+
+                let matchCount = 0;
+
+                snapshot.forEach(docSnap => {
+                    const donor = docSnap.data();
+                    // Distance calculation using Haversine logic
+                    const distance = calculateHaversine(seekerLat, seekerLng, donor.latitude, donor.longitude);
+                    
+                    if(distance <= maxDistance) {
+                        matchCount++;
+                        
+                        // Create card for the results list
+                        const card = document.createElement('div');
+                        card.className = "col-md-6 mb-3";
+                        card.innerHTML = `
+                            <div class="p-3 bg-white shadow-sm rounded donor-card border">
+                                <h6 class="text-danger fw-bold mb-1">${donor.name} (${donor.bloodGroup})</h6>
+                                <p class="small text-muted mb-2">📍 ${donor.city} | 📏 <strong>${distance.toFixed(2)} km</strong> away</p>
+                                <a href="tel:${donor.phone}" class="btn btn-sm btn-success w-100">Contact Donor</a>
+                            </div>
+                        `;
+                        resDiv.appendChild(card);
+
+                        // Add Donor to Map (Red Circle Marker)
+                        L.circleMarker([donor.latitude, donor.longitude], {
+                            color: '#dc3545',
+                            fillColor: '#dc3545',
+                            fillOpacity: 0.6,
+                            radius: 10
+                        }).addTo(markerGroup)
+                        .bindPopup(`<b>${donor.name}</b><br>${distance.toFixed(2)} km away`);
+                    }
+                });
+                
+                if(matchCount === 0) {
+                    resDiv.innerHTML = `<div class='alert alert-light border'>No ${groupNeeded} donors found within ${maxDistance} km.</div>`;
+                }
+
+            } catch (error) { 
+                console.error("Firebase Error:", error);
+                resDiv.innerHTML = "<div class='alert alert-danger'>Search failed. Verify your database connection.</div>"; 
+            }
+        }
+
+        // Great-Circle distance formula implementation
+        function calculateHaversine(lat1, lon1, lat2, lon2) {
+            const R = 6371; // Earth radius in km
+            const dLat = (lat2-lat1) * Math.PI / 180;
+            const dLon = (lon2-lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        }
+    </script>
 </body>
 </html>
