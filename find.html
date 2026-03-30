@@ -79,6 +79,7 @@
 
                 querySnapshot.forEach((doc) => {
                     const donor = doc.data();
+                    if (donor.available === false) return; // Skip unavailable donors
                     
                     // 2. Calculate Distance
                     const distance = calculateDistance(seekerLat, seekerLng, donor.latitude, donor.longitude);
